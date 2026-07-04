@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>天気アプリ</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --radius: 16px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+
+  h1 {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+
+  /* ── 都市切替ボタン ── */
+  .city-tabs {
+    display: flex;
+    gap: 8px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 4px;
+    margin-bottom: 24px;
+  }
+
+  .city-tabs button {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 100px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all .2s;
+  }
+
+  .city-tabs button.active {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .city-tabs button:not(.active):hover {
+    background: rgba(255,255,255,.07);
+    color: var(--text);
+  }
+
+  /* ── メインカード ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 400px;
+    padding: 36px 32px 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: -60px; right: -60px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(88,166,255,.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .city-name {
+    font-size: 15px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .date-str {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 28px;
+  }
+
+  .weather-main {
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+    margin-bottom: 8px;
+  }
+
+  .temp-big {
+    font-size: 88px;
+    font-weight: 200;
+    line-height: 1;
+    letter-spacing: -4px;
+  }
+
+  .temp-unit {
+    font-size: 32px;
+    font-weight: 300;
+    margin-bottom: 12px;
+    color: var(--muted);
+  }
+
+  .weather-icon-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .weather-emoji {
+    font-size: 56px;
+    line-height: 1;
+  }
+
+  .weather-label {
+    font-size: 13px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .feel-temp {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 28px;
+  }
+
+  /* ── 詳細グリッド ── */
+  .details {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+
+  .detail-item {
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+  }
+
+  .detail-item .label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    margin-bottom: 6px;
+  }
+
+  .detail-item .value {
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  .detail-item .value small {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+    margin-left: 2px;
+  }
+
+  /* ── ローディング・エラー ── */
+  .state-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 40px 0;
+    min-height: 220px;
+    justify-content: center;
+  }
+
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255,255,255,.1);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .state-box p { font-size: 14px; color: var(--muted); }
+
+  .error-icon { font-size: 40px; }
+
+  .updated {
+    text-align: right;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 14px;
+  }
+
+  /* ── スマホ調整 ── */
+  @media (max-width: 420px) {
+    .temp-big { font-size: 72px; }
+    .card { padding: 28px 20px 22px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Weather</h1>
+
+<div class="city-tabs">
+  <button onclick="select('takamatsu')" id="tab-takamatsu" class="active">高松</button>
+  <button onclick="select('tokyo')"     id="tab-tokyo">東京</button>
+  <button onclick="select('osaka')"     id="tab-osaka">大阪</button>
+</div>
+
+<div class="card" id="card">
+  <div class="state-box" id="loading">
+    <div class="spinner"></div>
+    <p>取得中…</p>
+  </div>
+  <div id="weather" style="display:none">
+    <div class="city-name" id="city-name"></div>
+    <div class="date-str" id="date-str"></div>
+    <div class="weather-main">
+      <div>
+        <span class="temp-big" id="temp">--</span><span class="temp-unit">°C</span>
+      </div>
+      <div class="weather-icon-wrap">
+        <span class="weather-emoji" id="emoji">--</span>
+        <span class="weather-label" id="wlabel">--</span>
+      </div>
+    </div>
+    <div class="feel-temp">体感 <span id="feels">--</span>°C</div>
+    <div class="details">
+      <div class="detail-item">
+        <div class="label">湿度</div>
+        <div class="value"><span id="humidity">--</span><small>%</small></div>
+      </div>
+      <div class="detail-item">
+        <div class="label">風速</div>
+        <div class="value"><span id="wind">--</span><small>km/h</small></div>
+      </div>
+      <div class="detail-item">
+        <div class="label">降水量</div>
+        <div class="value"><span id="precip">--</span><small>mm</small></div>
+      </div>
+      <div class="detail-item">
+        <div class="label">昼夜</div>
+        <div class="value"><span id="uv">--</span></div>
+      </div>
+    </div>
+  </div>
+  <div id="err-box" style="display:none">
+    <div class="state-box">
+      <span class="error-icon">⚠️</span>
+      <p id="err-msg">エラーが発生しました</p>
+    </div>
+  </div>
+  <div class="updated" id="updated"></div>
+</div>
+
+<script>
+const CITIES = {
+  takamatsu: { name: '高松',  lat: 34.34, lon: 134.05, tz: 'Asia/Tokyo' },
+  tokyo:     { name: '東京',  lat: 35.68, lon: 139.69, tz: 'Asia/Tokyo' },
+  osaka:     { name: '大阪',  lat: 34.69, lon: 135.50, tz: 'Asia/Tokyo' },
+};
+
+const WMO = {
+  0:  ['☀️','快晴'],
+  1:  ['🌤️','おおむね晴れ'],
+  2:  ['⛅','一部曇り'],
+  3:  ['☁️','曇り'],
+  45: ['🌫️','霧'],
+  48: ['🌫️','霧氷'],
+  51: ['🌦️','霧雨（弱）'],
+  53: ['🌦️','霧雨'],
+  55: ['🌧️','霧雨（強）'],
+  61: ['🌧️','小雨'],
+  63: ['🌧️','雨'],
+  65: ['🌧️','大雨'],
+  71: ['🌨️','小雪'],
+  73: ['🌨️','雪'],
+  75: ['❄️','大雪'],
+  77: ['🌨️','霧雪'],
+  80: ['🌦️','にわか雨（弱）'],
+  81: ['🌧️','にわか雨'],
+  82: ['⛈️','激しいにわか雨'],
+  85: ['🌨️','にわか雪'],
+  86: ['❄️','激しいにわか雪'],
+  95: ['⛈️','雷雨'],
+  96: ['⛈️','雷雨（雹）'],
+  99: ['⛈️','激しい雷雨'],
+};
+
+let current = 'takamatsu';
+
+function setView(id) {
+  document.getElementById('loading').style.display  = id==='loading' ? 'flex' : 'none';
+  document.getElementById('weather').style.display  = id==='weather' ? 'block' : 'none';
+  document.getElementById('err-box').style.display  = id==='err'     ? 'block' : 'none';
+}
+
+async function select(key) {
+  current = key;
+  Object.keys(CITIES).forEach(k => {
+    document.getElementById('tab-'+k).classList.toggle('active', k===key);
+  });
+  setView('loading');
+  document.getElementById('updated').textContent = '';
+
+  const c = CITIES[key];
+  const url = `https://api.open-meteo.com/v1/forecast`
+    + `?latitude=${c.lat}&longitude=${c.lon}`
+    + `&current=temperature_2m,apparent_temperature,relative_humidity_2m,`
+    + `precipitation,weather_code,windspeed_10m,is_day`
+    + `&timezone=${c.tz}`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
+    const w = d.current;
+
+    const code = w.weather_code;
+    const [emoji, label] = WMO[code] ?? ['🌡️','不明'];
+
+    document.getElementById('city-name').textContent = c.name;
+    document.getElementById('date-str').textContent  = fmtDate(w.time);
+    document.getElementById('temp').textContent      = Math.round(w.temperature_2m);
+    document.getElementById('feels').textContent     = Math.round(w.apparent_temperature);
+    document.getElementById('emoji').textContent     = emoji;
+    document.getElementById('wlabel').textContent    = label;
+    document.getElementById('humidity').textContent  = w.relative_humidity_2m;
+    document.getElementById('wind').textContent      = Math.round(w.windspeed_10m);
+    document.getElementById('precip').textContent    = w.precipitation.toFixed(1);
+    document.getElementById('uv').textContent        = w.is_day ? '☀️ 昼' : '🌙 夜';
+    document.getElementById('updated').textContent   =
+      '更新 ' + new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'});
+
+    setView('weather');
+  } catch(e) {
+    let msg = e.message || '不明なエラー';
+    if (e instanceof TypeError && msg.includes('fetch')) {
+      msg = 'ネットワークに接続できません。インターネット接続を確認してください。';
+    }
+    document.getElementById('err-msg').textContent = msg;
+    setView('err');
+  }
+}
+
+function fmtDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric',weekday:'short'});
+}
+
+select('takamatsu');
+</script>
+</body>
+</html>
