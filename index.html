@@ -218,16 +218,162 @@
     margin-top: 14px;
   }
 
+  /* ── ニックネーム ── */
+  .nickname-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 6px 12px 6px 16px;
+    width: 100%;
+    max-width: 400px;
+  }
+
+  .nickname-bar input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+  }
+
+  .nickname-bar input::placeholder { color: var(--muted); }
+
+  .nickname-bar button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 100px;
+    padding: 5px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity .2s;
+  }
+
+  .nickname-bar button:hover { opacity: .85; }
+
   /* ── スマホ調整 ── */
   @media (max-width: 420px) {
     .temp-big { font-size: 72px; }
     .card { padding: 28px 20px 22px; }
   }
+
+  /* ── ロック画面 ── */
+  #lockScreen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    z-index: 100;
+  }
+
+  #lockScreen h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+
+  #lockScreen p {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  .lock-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .lock-card input {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 15px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .2s;
+  }
+
+  .lock-card input:focus { border-color: var(--accent); }
+
+  .lock-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: opacity .2s;
+  }
+
+  .lock-btn:hover { opacity: .85; }
+
+  .lock-btn.danger {
+    background: transparent;
+    color: #f85149;
+    border: 1px solid #f85149;
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  .lock-error {
+    font-size: 12px;
+    color: #f85149;
+    text-align: center;
+    min-height: 18px;
+  }
+
+  .lock-icon { font-size: 48px; margin-bottom: 8px; }
 </style>
 </head>
 <body>
 
-<h1>Weather</h1>
+<!-- ロック画面 -->
+<div id="lockScreen">
+  <div class="lock-icon" id="lockIcon">🔒</div>
+  <h2 id="lockTitle">パスワードを入力</h2>
+  <p id="lockDesc">天気アプリにアクセスするにはパスワードが必要です</p>
+  <div class="lock-card">
+    <input type="password" id="pwInput" placeholder="パスワード" maxlength="50" autocomplete="current-password" />
+    <input type="password" id="pwConfirm" placeholder="確認用（もう一度入力）" maxlength="50" style="display:none" autocomplete="new-password" />
+    <div class="lock-error" id="lockError"></div>
+    <button class="lock-btn" id="lockBtn" onclick="handleLock()">ロック解除</button>
+    <button class="lock-btn danger" id="resetBtn" onclick="resetPassword()" style="display:none">パスワードをリセット（データも消去）</button>
+  </div>
+</div>
+
+<h1 id="main-title">Weather</h1>
+
+<div class="nickname-bar">
+  <input type="text" id="nicknameInput" placeholder="ニックネームを入力…" maxlength="20" />
+  <button onclick="saveNickname()">保存</button>
+</div>
 
 <div class="city-tabs">
   <button onclick="select('takamatsu')" id="tab-takamatsu" class="active">高松</button>
@@ -315,7 +461,97 @@ const WMO = {
   99: ['⛈️','激しい雷雨'],
 };
 
+// ── パスワード機能 ──
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+const PW_KEY = 'weather_pw_hash';
+
+function initLockScreen() {
+  const hasPassword = !!localStorage.getItem(PW_KEY);
+  if (hasPassword) {
+    document.getElementById('lockTitle').textContent = 'パスワードを入力';
+    document.getElementById('lockDesc').textContent  = '天気アプリにアクセスするにはパスワードが必要です';
+    document.getElementById('lockBtn').textContent   = 'ロック解除';
+    document.getElementById('pwConfirm').style.display = 'none';
+    document.getElementById('resetBtn').style.display  = 'block';
+  } else {
+    document.getElementById('lockIcon').textContent  = '🔑';
+    document.getElementById('lockTitle').textContent = 'パスワードを設定';
+    document.getElementById('lockDesc').textContent  = '初回設定です。使用するパスワードを決めてください';
+    document.getElementById('lockBtn').textContent   = 'パスワードを設定する';
+    document.getElementById('pwConfirm').style.display = 'block';
+    document.getElementById('resetBtn').style.display  = 'none';
+  }
+  document.getElementById('pwInput').addEventListener('keydown', e => { if (e.key === 'Enter') handleLock(); });
+  document.getElementById('pwConfirm').addEventListener('keydown', e => { if (e.key === 'Enter') handleLock(); });
+}
+
+async function handleLock() {
+  const pw  = document.getElementById('pwInput').value;
+  const err = document.getElementById('lockError');
+  if (!pw) { err.textContent = 'パスワードを入力してください'; return; }
+
+  const hasPassword = !!localStorage.getItem(PW_KEY);
+
+  if (hasPassword) {
+    const hash = await sha256(pw);
+    if (hash === localStorage.getItem(PW_KEY)) {
+      document.getElementById('lockScreen').style.display = 'none';
+    } else {
+      err.textContent = 'パスワードが違います';
+      document.getElementById('pwInput').value = '';
+      document.getElementById('pwInput').focus();
+    }
+  } else {
+    const confirm = document.getElementById('pwConfirm').value;
+    if (pw.length < 4) { err.textContent = '4文字以上で設定してください'; return; }
+    if (pw !== confirm) { err.textContent = 'パスワードが一致しません'; return; }
+    localStorage.setItem(PW_KEY, await sha256(pw));
+    document.getElementById('lockScreen').style.display = 'none';
+  }
+}
+
+function resetPassword() {
+  const typed = document.getElementById('pwInput').value;
+  if (typed !== 'RESET') {
+    document.getElementById('lockError').textContent = 'リセットするには入力欄に「RESET」と入力してください';
+    return;
+  }
+  localStorage.clear();
+  location.reload();
+}
+
+initLockScreen();
+
+// ── ここから既存コード ──
 let current = 'takamatsu';
+
+function saveNickname() {
+  const name = document.getElementById('nicknameInput').value.trim();
+  if (name) {
+    localStorage.setItem('weather_nickname', name);
+  } else {
+    localStorage.removeItem('weather_nickname');
+  }
+  updateTitle();
+}
+
+function updateTitle() {
+  const name = localStorage.getItem('weather_nickname');
+  document.getElementById('main-title').textContent = name ? `${name}さんの天気` : 'Weather';
+}
+
+// 起動時に復元
+(function init() {
+  const saved = localStorage.getItem('weather_nickname');
+  if (saved) {
+    document.getElementById('nicknameInput').value = saved;
+  }
+  updateTitle();
+})();
 
 function setView(id) {
   document.getElementById('loading').style.display  = id==='loading' ? 'flex' : 'none';
